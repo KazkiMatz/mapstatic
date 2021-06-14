@@ -4,20 +4,22 @@ module Mapstatic
 
   class Map
     TILE_SIZE = 256
+    MAX_ZOOM = 21
 
     attr_reader :zoom, :lat, :lng, :width, :height
     attr_accessor :tile_source
 
     def initialize(params={})
+      @width  = params.fetch(:width).to_f
+      @height = params.fetch(:height).to_f
       if params[:bbox]
         @bounding_box = params[:bbox].split(',').map(&:to_f)
+        @zoom = dynamic_zoom(bounding_box, @width, @height, TILE_SIZE)
       else
         @lat    = params.fetch(:lat).to_f
         @lng    = params.fetch(:lng).to_f
-        @width  = params.fetch(:width).to_f
-        @height = params.fetch(:height).to_f
+        @zoom = params.fetch(:zoom).to_i
       end
-      @zoom = params.fetch(:zoom).to_i
       @tile_source = TileSource.new(params[:provider])
     end
 
@@ -154,6 +156,27 @@ module Mapstatic
       end
 
       image
+    end
+
+    def latitude_radians(lat)
+      sin = Math.sin(lat * Math::PI / 180)
+      radX2 = Math.log((1 + sin) / (1 - sin)) / 2;
+      [[radX2, Math::PI].min, -Math::PI].max / 2;
+    end
+
+    def get_zoom(size, fraction, tile_size = 256)
+      (Math.log(size / tile_size / fraction) / Math.log(2)).floor()
+    end
+
+    def dynamic_zoom(bounding_box, width, height, title_size)
+      left, bottom, right, top = bounding_box
+      lat_fraction = (latitude_radians(top) - latitude_radians(bottom)) / Math::PI;
+      lng_diff = right - left;
+      lng_fraction = ((lng_diff < 0) ? (lng_diff + 360) : lng_diff) / 360;
+
+      lat_zoom = get_zoom(width, lat_fraction);
+      lng_zoom = get_zoom(height, lng_fraction);
+      [lat_zoom, lng_zoom, MAX_ZOOM].min
     end
 
   end
